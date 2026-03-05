@@ -1,0 +1,116 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+#Load training data
+TrainMat = np.load('TrainDigits.npy')
+TrainLab = np.load('TrainLabels.npy')
+
+#extract the 400 first examples of digit d
+def build_a(d, n=400):
+    index = (TrainLab == d)
+    ad = TrainMat[:, index[0]]
+    ad = ad[:, 0:n]
+    return ad
+
+#Store each matrix for each digit in a dict
+A_dict = {}
+U_dict = {}
+s_dict = {}
+
+#Create SVD matrix
+for d in [3, 8]:
+    A_dict[d] = build_a(d, 400).astype(float)
+    U, s, Vt = np.linalg.svd(A_dict[d], full_matrices=False)
+    U_dict[d] = U
+    s_dict[d] = s
+
+#Plot singular values
+def plot_singular_values(s, title):
+    plt.figure()
+    x = np.arange(1, len(s) + 1)
+    plt.plot(x, s)
+    plt.title(title)
+    plt.xlabel("Index i")
+    plt.ylabel("Singular value sigma")
+    plt.grid(True)
+    plt.show()
+
+#Creates plots for digit 3 and 8
+plot_singular_values(s_dict[3], "Singular values for digit 3 (784×400)")
+plot_singular_values(s_dict[8], "Singular values for digit 8 (784×400)")
+
+def plot_singular_images(U, digit):
+    #Loop for the 3 first images
+    for i in range(3):
+        ui = U[:, i] #Extract image i from ui matrix
+        img = np.reshape(ui, (28, 28)).T 
+        #Reshape column vector to a 28x28 matrix
+
+        #plot the image of ui matrix
+        plt.figure()
+        plt.imshow(img, cmap='gray')
+        plt.title(f"Digit {digit}: left singular   
+            vector $u_{i + 1}$")
+        plt.axis("off")
+        plt.show()
+
+plot_singular_images(U_dict[3], 3)
+plot_singular_images(U_dict[8], 8)
+
+#Load the Test Data
+TestMat = np.load('TestDigits.npy')
+TestLab = np.load('TestLabels.npy').flatten()
+
+#Precompute SVDs for all 10 digits
+U_all_dict = {}
+max_k = 15
+
+for d in range(10):
+    Ad = build_a(d, 400).astype(float)
+    U, s, Vt = np.linalg.svd(Ad, full_matrices=False)
+    U_all_dict[d] = U[:, :max_k]
+
+k_values = list(range(5, max_k+1))
+#Matrix to store the success percentages: 10 
+#digits x 11 different k values
+success_rates = np.zeros((10, len(k_values)))
+
+#Grab the number of test images
+num_test_images = TestMat.shape[1]
+
+for i, k in enumerate(k_values):
+    #Create the residual vector with zeros
+    residuals = np.zeros((10, num_test_images))
+
+    #For each digit create the Uk matrix and calculate residuals
+    for d in range(10):
+        Uk = U_all_dict[d][:, :k]
+        projection = Uk @ (Uk.T @ TestMat)
+        residual_matrix = TestMat - projection
+        residuals[d, :] = np.linalg.norm(residual_matrix, axis=0)
+
+    #Predict the correct digit by choosing the 
+    #one with the smallest residual
+    predictions = np.argmin(residuals, axis=0)
+
+    #Calculate success rate for each digit and 
+    #store it in our matrix
+    for d in range(10):
+        true_d_indices = (TestLab == d)
+        correct_d = np.sum(predictions[true_d_indices] == d)
+        total_d = np.sum(true_d_indices)
+        success_rate = (correct_d / total_d) * 100
+        success_rates[d, i] = success_rate
+
+plt.figure(figsize=(8, 5))
+
+# Plot a line for each digit
+for d in range(10):
+    plt.plot(k_values, success_rates[d, :], label=str(d))
+
+plt.xlabel("k (columns of U)")
+plt.ylabel("Percentage of success")
+plt.title("Classification Success Rate vs Number of Basis Functions")
+plt.legend(loc="upper left")
+plt.tight_layout()
+plt.show()
